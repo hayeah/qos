@@ -1,20 +1,28 @@
 package main
 
 import (
-	"fmt"
 	"log"
-
 	"os"
 
 	"github.com/hayeah/qos"
 )
 
 func main() {
-	port := os.Args[1]
-	fmt.Printf("dial: %v\n", port)
+	addr := os.Args[1]
 
-	err := qos.StartClient(port)
+	client, err := qos.NewClient(addr)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = client.Get(10, os.Stdout)
 	if err != nil {
 		log.Println(err)
 	}
+	err = client.Get(50, os.Stdout)
+	if err != nil {
+		log.Println(err)
+	}
+
 }

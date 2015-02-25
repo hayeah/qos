@@ -22,3 +22,13 @@ The client will measure:
 
 1. A steady transfer rate.
 2. Round trip time.
+
+# Protocol
+
+Memcache-like protocol.
+
+Commands are case insensitive.
+
+get <nbytes>\r\n
+bytes <nbytes>\r\n
+<data>\r\n

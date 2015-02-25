@@ -1,25 +1,37 @@
 package qos
 
 import (
+	"bufio"
 	"fmt"
 	"log"
 	"math/rand"
 	"net"
+	"strconv"
+	"strings"
+)
+
+var (
+	CmdBytes = "BYTES"
+	CmdGet   = "GET"
 )
 
 func StartServer(port string) error {
-	so, err := net.Listen("tcp", fmt.Sprintf(":%v", port))
+	addr := fmt.Sprintf(":%v", port)
+	so, err := net.Listen("tcp", addr)
 	if err != nil {
 		return err
 	}
 
+	log.Println("listening:", addr)
 	for {
 		conn, err := so.Accept()
+
 		if err != nil {
 			log.Println(err)
 		} else {
-			log.Println("new connection")
-			handleServerLoad(conn)
+			log.Println("client connected")
+			server := &Server{conn: conn}
+			go server.commandLoop()
 		}
 	}
 }
@@ -29,50 +41,130 @@ const (
 	MB = 1024 * 1024
 )
 
-var randKB []byte
+var randChunk []byte
 
-func init() {
-	randKB = make([]byte, 1024)
-	for i := 0; i < len(randKB); i++ {
-		randKB[i] = byte(97 + (rand.Int() % 26))
-	}
-	log.SetFlags(log.Lshortfile | log.Ltime)
+type Server struct {
+	conn net.Conn
 }
 
-func handleServerLoad(conn net.Conn) error {
-	defer conn.Close()
-	var err error
-	// var buf []byte
+// type ServerHandler {
+// }
 
-	nbytes := 0
-	// // write 10M
-	for i := 0; i < 1024; i++ {
-		n, err := conn.Write(randKB)
-		if err != nil {
-			log.Println(err)
+var (
+	UnknownCommandError = []byte("ERROR")
+	ClientError         = []byte("CLIENT_ERROR")
+)
+
+func (s *Server) commandLoop() {
+	// what's the client-side close error?
+	// peek next line
+	conn := s.conn
+	defer conn.Close()
+
+	lines := bufio.NewScanner(conn)
+
+	for {
+
+		if ok := lines.Scan(); !ok {
+			if err := lines.Err(); err != nil {
+				log.Println(err)
+			} else {
+				log.Println("client disconnected")
+			}
 			break
 		}
-		nbytes += n
+
+		line := lines.Text()
+
+		parts := strings.Split(line, " ")
+
+		cmd := strings.ToUpper(parts[0])
+		args := parts[1:]
+
+		switch cmd {
+		case "GET":
+			// bytes <nbytes>
+			// VALUE <nbytes>\r\n
+			//
+			if len(args) != 1 {
+				s.replyClientError("Invalid number of arguments.")
+				continue
+			}
+
+			nbytes, err := strconv.Atoi(args[0])
+			if err != nil {
+				s.replyClientError("Number of bytes not an integer.")
+				continue
+			}
+
+			log.Printf("writing %v bytes to client\n", nbytes)
+			// not quit sure what to do if there's error when outputting bytes. close connection?
+			err = s.replyBytes(nbytes)
+			if err != nil {
+				log.Println(err)
+			}
+
+			// for n, nwritten := 0; n < nbytes; n + nwritten {
+			// 	bytes = randKB
+			// 	conn.Write(randKB)
+			// }
+
+		default:
+			// "ERROR\r\n"
+			conn.Write(UnknownCommandError)
+			conn.Write([]byte("\r\n"))
+		}
 	}
-	fmt.Printf("total bytes written: %v\n", nbytes)
 
-	// n, err := io.Copy(os.Stdout, conn)
-	// fmt.Printf("read:%v\n", n)
-	// if err != nil {
-	// 	log.Println(err)
-	// }
+	return
+}
 
-	// for {
-	// 	var buf []byte
-	// 	conn.Rea
-	// 	_, err := conn.Read(buf)
-	// 	fmt.Printf("read:%v\n", buf)
-	// 	if err != nil {
-	// 		log.Println(err)
-	// 		break
-	// 	}
-	// }
+func (s *Server) replyBytes(nbytes int) error {
+	conn := s.conn
+
+	var err error
+	conn.Write([]byte("BYTES "))
+	conn.Write([]byte(strconv.Itoa(nbytes)))
+	conn.Write([]byte("\r\n"))
+
+	nwritten := 0
+	chunkSize := len(randChunk)
+	for nwritten < nbytes {
+		bytesRemain := nbytes - nwritten
+		chunk := randChunk
+		if bytesRemain < chunkSize {
+			chunk = chunk[0:bytesRemain]
+		}
+
+		n, err := conn.Write(chunk)
+		if err != nil {
+			break
+		}
+
+		nwritten += n
+	}
+
+	conn.Write([]byte("\r\n"))
 
 	return err
-	// read 1M
+}
+
+func (s *Server) replyClientError(msg string) {
+	conn := s.conn
+	conn.Write(ClientError)
+	conn.Write([]byte(" "))
+	conn.Write([]byte(msg))
+	conn.Write([]byte("\r\n"))
+}
+
+func (s *Server) handlePing() {
+
+}
+
+func init() {
+	randChunk = make([]byte, 1024*4)
+	for i := 0; i < len(randChunk); i++ {
+		randChunk[i] = byte(97 + (rand.Int() % 26))
+	}
+	log.SetFlags(log.Lshortfile | log.Ltime)
 }
