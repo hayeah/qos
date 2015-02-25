@@ -62,7 +62,7 @@ loop:
 			lastTick = t
 
 			log.Println("bytes:", bytesWritten)
-			log.Println("rate(kb/s):", float64(bytesWritten/1024)/dt.Seconds())
+			log.Printf("rate(kb/s): %.2f\n", float64(bytesWritten/1024)/dt.Seconds())
 		case err = <-done:
 			break loop
 		}
@@ -71,7 +71,7 @@ loop:
 	// report throughput
 	nbytes = cw.BytesWritten
 	log.Println("total bytes:", cw.BytesWritten)
-	log.Println("throughput(kb/s):", float64(nbytes/1024)/time.Since(start).Seconds())
+	log.Printf("throughput(kb/s): %.2f\n", float64(nbytes/1024)/time.Since(start).Seconds())
 	return err
 }
 

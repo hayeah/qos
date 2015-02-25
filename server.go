@@ -162,7 +162,7 @@ func (s *Server) handlePing() {
 }
 
 func init() {
-	randChunk = make([]byte, 1024*4)
+	randChunk = make([]byte, 1024*128)
 	for i := 0; i < len(randChunk); i++ {
 		randChunk[i] = byte(97 + (rand.Int() % 26))
 	}
